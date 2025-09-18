@@ -157,6 +157,83 @@ impl JacketFinder {
         })
     }
 
+    /// Creates a new jacket finder with custom search terms and all components initialized.
+    ///
+    /// This constructor allows configuring custom search terms for specialized
+    /// monitoring scenarios while setting up all other components with their
+    /// default configurations.
+    ///
+    /// ## Custom Search Configuration
+    ///
+    /// Search terms should be chosen carefully:
+    /// - **Specific Terms**: "n-1 deck jacket", "type a-2 jacket" for targeted searches
+    /// - **Broader Terms**: "deck jacket", "flight jacket" for category searches
+    /// - **Brand-Specific**: "buzz rickson", "real mccoy" for brand monitoring
+    /// - **Avoid Too Broad**: Terms like "jacket" may return excessive results
+    ///
+    /// ## Parameters
+    ///
+    /// - `search_terms`: Vector of search terms to monitor on Marrkt
+    ///
+    /// ## Initialization Order
+    ///
+    /// 1. **Scraper**: HTTP client setup with custom search terms (synchronous)
+    /// 2. **Database**: `SQLite` connection and migration execution (async)
+    /// 3. **Discord**: Environment configuration loading (synchronous)
+    ///
+    /// ## Error Handling
+    ///
+    /// This method can fail if:
+    /// - Database connection cannot be established
+    /// - `SQLite` database file cannot be created/accessed
+    /// - Database migrations fail to execute
+    /// - File system permissions prevent database creation
+    ///
+    /// ## Environment Dependencies
+    ///
+    /// Optional environment variables:
+    /// - `DISCORD_WEBHOOK_URL`: Discord webhook for notifications
+    /// - `DATABASE_URL`: Custom `SQLite` database path (defaults to `jackets.db`)
+    ///
+    /// ## Return Value
+    ///
+    /// Returns a fully initialized `JacketFinder` ready for use, or an error
+    /// if critical components (primarily database) cannot be set up.
+    ///
+    /// ## Example
+    ///
+    /// ```rust
+    /// use jacket_finder::jacket_finder::JacketFinder;
+    ///
+    /// #[tokio::main]
+    /// async fn main() -> anyhow::Result<()> {
+    ///     let search_terms = vec![
+    ///         "n-1 deck jacket".to_string(),
+    ///         "deck jacket".to_string(),
+    ///         "flight jacket".to_string(),
+    ///         "bomber jacket".to_string(),
+    ///     ];
+    ///
+    ///     let finder = JacketFinder::with_search_terms(search_terms).await?;
+    ///
+    ///     // Ready for monitoring with custom search terms
+    ///     finder.check_for_new_jackets().await?;
+    ///     Ok(())
+    /// }
+    /// ```
+    #[allow(dead_code)]
+    pub async fn with_search_terms(search_terms: Vec<String>) -> Result<Self> {
+        let scraper = Scraper::with_search_terms(search_terms);
+        let database = Database::new().await?;
+        let discord = DiscordNotifier::new();
+
+        Ok(Self {
+            scraper,
+            database,
+            discord,
+        })
+    }
+
     /// Performs a complete jacket discovery cycle with notifications.
     ///
     /// This is the main monitoring method that orchestrates the entire workflow:
