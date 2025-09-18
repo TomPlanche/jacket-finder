@@ -11,7 +11,8 @@ mod database;
 mod discord;
 mod jacket_finder;
 mod models;
-mod scraper;
+mod scrapers;
+mod traits;
 
 /// Application entry point and runtime management
 struct App {

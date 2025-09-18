@@ -1,13 +1,16 @@
-# N-1 Deck Jacket Finder Bot
+# Multi-Website Jacket Finder Bot
 
-A Rust bot that monitors [Marrkt](https://www.marrkt.com/search) every 5 minutes for new N-1 deck jacket listings and sends Discord notifications when new items are found.
+A Rust bot that monitors multiple websites for jacket listings and sends Discord notifications when new items are found. The bot features a website-agnostic architecture that makes it easy to add support for new websites.
 
 ## Features
 
-- 🔍 Searches Marrkt for "n-1 deck jacket" listings every 5 minutes
-- 💾 Stores found jackets in a SQLite database to avoid duplicate notifications
-- 🚀 Sends rich Discord notifications with jacket details, price, and direct links
-- 📊 Logging with detailed information about bot activity
+- 🌐 **Website-agnostic**: Easy to add support for multiple websites
+- 🔍 **Pagination support**: Searches through all pages of results, not just the first page
+- 💾 **Duplicate prevention**: SQLite database prevents duplicate notifications
+- 🚀 **Rich notifications**: Discord embeds with jacket details, prices, and direct links
+- 📊 **Comprehensive logging**: Detailed information about bot activity across all websites
+- ⚡ **Concurrent scraping**: Searches multiple websites simultaneously
+- 🛡️ **Error isolation**: Issues with one website don't affect others
 
 ## Setup
 
@@ -49,20 +52,32 @@ A Rust bot that monitors [Marrkt](https://www.marrkt.com/search) every 5 minutes
 
 ## How it works
 
-1. **Initial scan:** The bot runs immediately on startup to find existing jackets
-2. **Scheduled monitoring:** Every 5 minutes, it searches Marrkt for new listings
-3. **Duplicate detection:** Uses a SQLite database to track previously seen jackets
-4. **Notifications:** Sends Discord messages only for genuinely new jackets
+1. **Initial scan:** The bot runs immediately on startup to find existing jackets across all configured websites
+2. **Scheduled monitoring:** Every 5 minutes, it searches all configured websites for new listings
+3. **Pagination crawling:** Follows pagination links to search through all pages of results
+4. **Duplicate detection:** Uses a SQLite database to track previously seen jackets across all websites
+5. **Error isolation:** If one website fails, others continue working normally
+6. **Notifications:** Sends Discord messages only for genuinely new jackets
+
+## Supported Websites
+
+Currently supported websites:
+- **Marrkt.com**: Searches for N-1 deck jackets and general deck jackets
+
+Adding new websites is straightforward - see the [Adding New Websites](#adding-new-websites) section below.
 
 ## Project Structure
 
 ```
 src/
 ├── main.rs              # Application entry point and scheduler
-├── jacket_finder.rs     # Main coordination logic
+├── jacket_finder.rs     # Main coordination logic (manages multiple scrapers)
+├── traits.rs            # WebsiteScraper trait and configuration types
 ├── models/              # Data structures and types
 ├── database/            # Database operations
-├── scraper/             # Web scraping functionality
+├── scrapers/            # Website-specific scraper implementations
+│   ├── mod.rs           # Scraper module exports
+│   └── marrkt.rs        # Marrkt.com scraper implementation
 └── discord/             # Discord notification handling
 migrations/
 └── 001_create_jackets_table.sql  # Database schema migrations
@@ -92,22 +107,101 @@ Each new jacket triggers a rich embed with:
 - 🖼️ Thumbnail image (if available)
 - ⏰ Discovery timestamp
 
-## Customization
+## Adding New Websites
 
-The scraper is configured for Marrkt's current HTML structure:
-- **Product containers:** `.product-card-wrapper`
-- **Titles:** `.product-title a, .card-title a` 
-- **Brands:** `.card-subtitle`
-- **Prices:** `.product-price-exc-vat`
-- **Images:** `.responsive-image__image` with lazy loading support
+The bot's architecture makes it easy to add support for new websites. Here's how:
 
-To modify the search criteria:
-- Change the search URL query parameters in `src/scraper/mod.rs`
-- Adjust the filtering logic for titles (currently matches "n-1" or "deck jacket")
-- Update selectors if Marrkt changes their HTML structure
+### 1. Create a New Scraper
+
+Create a new file (e.g., `src/scrapers/yoursite.rs`) using the `MarrktScraper` as a template:
+
+```rust
+// Update the ScraperConfig with your website's details
+let config = ScraperConfig {
+    name: "Your Site".to_string(),
+    base_url: "https://yoursite.com".to_string(),
+    search_url_pattern: "https://yoursite.com/search?q={query}".to_string(),
+    selectors: SiteSelectors {
+        product_container: ".product",           // CSS selector for product containers
+        title: ".product-title",                // CSS selector for product titles
+        price: ".price",                        // CSS selector for prices
+        brand: Some(".brand"),                  // Optional: brand selector
+        link: ".product-link",                  // CSS selector for product links
+        image: ".product-image img",            // CSS selector for images
+        pagination_container: ".pagination",    // CSS selector for pagination
+        pagination_next: ".next",               // CSS selector for "next page" link
+        sold_out_indicator: Some(".sold-out"), // Optional: sold out indicator
+    },
+    search_terms: vec!["jacket".to_string()],   // Terms to search for
+};
+```
+
+### 2. Update the Module
+
+Add your scraper to `src/scrapers/mod.rs`:
+
+```rust
+pub mod yoursite;
+pub use yoursite::YourSiteScraper;
+```
+
+### 3. Register the Scraper
+
+Add your scraper to the JacketFinder in `src/jacket_finder.rs`:
+
+```rust
+// In the new() method
+let yoursite_scraper = YourSiteScraper::new()?;
+scrapers.push(Arc::new(yoursite_scraper));
+```
+
+### 4. Website-Specific Customizations
+
+Each scraper can customize:
+- **Search terms**: What products to look for
+- **CSS selectors**: How to extract data from HTML
+- **URL patterns**: How to build search URLs
+- **Pagination logic**: How to follow next page links
+- **Filtering logic**: What products to include/exclude
+
+### 5. Testing
+
+Run the bot and check the logs to see your new website being scraped:
+
+```bash
+cargo run
+```
+
+## Architecture Overview
+
+The bot uses a trait-based architecture:
+
+- **`WebsiteScraper` trait**: Defines the interface all scrapers must implement
+- **`ScraperConfig`**: Contains website-specific configuration (URLs, selectors, etc.)
+- **`JacketFinder`**: Orchestrates multiple scrapers and handles notifications
+- **Error isolation**: If one website fails, others continue working
+
+This design makes the bot highly extensible while keeping the core logic simple and maintainable.
 
 ## Troubleshooting
 
-- **No jackets found:** The HTML selectors may need adjustment if Marrkt updates their site
+- **No jackets found:** Check if the HTML selectors need adjustment if websites update their structure
+- **Website errors:** Check logs to see which specific website is having issues - others will continue working
 - **Discord not working:** Verify your webhook URL is correct and the bot has internet access
 - **Database errors:** Ensure the directory is writable for SQLite database creation
+- **Scraper not working:** Use browser developer tools to inspect the website's HTML and update CSS selectors
+
+## Contributing
+
+To contribute support for new websites:
+
+1. Fork the repository
+2. Add a new scraper following the guide above
+3. Test thoroughly with the target website
+4. Submit a pull request with your new scraper
+
+Please ensure your scraper:
+- Respects the website's robots.txt and terms of service
+- Includes appropriate delays between requests
+- Handles errors gracefully
+- Follows the existing code style and passes all clippy checks
