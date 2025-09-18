@@ -1,3 +1,45 @@
+//! # Jacket Finder Bot
+//!
+//! A Rust-based bot that monitors [Marrkt](https://www.marrkt.com) for new N-1 deck jacket listings
+//! and sends Discord notifications when new items are discovered.
+//!
+//! ## Features
+//!
+//! - 🔍 **Intelligent Scraping**: Searches Marrkt every 5 minutes for N-1 deck jacket listings
+//! - 💾 **Duplicate Prevention**: Uses `SQLite` database to track seen jackets and avoid duplicate notifications
+//! - 🚀 **Discord Integration**: Sends rich notifications with product images, prices, and direct links
+//! - 📊 **Comprehensive Logging**: Detailed logging of all bot activities and errors
+//! - 🔧 **Modular Architecture**: Clean separation of concerns with dedicated modules for each functionality
+//!
+//! ## Architecture
+//!
+//! The bot is structured into several focused modules:
+//! - [`models`]: Data structures for jackets and Discord messages
+//! - [`database`]: `SQLite` operations and schema management with migrations
+//! - [`scraper`]: Web scraping logic for Marrkt product pages
+//! - [`discord`]: Discord webhook notifications with rich embeds
+//! - [`jacket_finder`]: Main coordination logic that orchestrates all components
+//!
+//! ## Environment Variables
+//!
+//! - `DISCORD_WEBHOOK_URL`: Discord webhook URL for notifications (optional)
+//!
+//! ## Example Usage
+//!
+//! ```bash
+//! # Set up Discord webhook
+//! export DISCORD_WEBHOOK_URL="https://discord.com/api/webhooks/..."
+//!
+//! # Run the bot
+//! cargo run
+//! ```
+//!
+//! The bot will:
+//! 1. Initialize database and create tables if needed
+//! 2. Run an immediate search to populate the database with existing jackets
+//! 3. Set up a scheduler to check every 5 minutes for new listings
+//! 4. Send Discord notifications only for genuinely new jackets
+
 use anyhow::Result;
 use tokio_cron_scheduler::{Job, JobScheduler};
 use tracing::{error, info};
@@ -10,6 +52,46 @@ mod scraper;
 
 use jacket_finder::JacketFinder;
 
+/// Main entry point for the Jacket Finder Bot.
+///
+/// This function sets up and runs the complete bot lifecycle:
+///
+/// ## Setup Phase
+/// 1. **Environment Loading**: Loads `.env` file variables using `dotenvy`
+/// 2. **Logging Initialization**: Sets up `tracing` for structured logging
+/// 3. **Component Initialization**: Creates the `JacketFinder` with all dependencies
+///
+/// ## Initial Check
+/// Performs an immediate search to populate the database with existing jackets,
+/// preventing duplicate notifications on first run.
+///
+/// ## Scheduler Setup
+/// - Creates a cron scheduler that runs every 5 minutes (`0 */5 * * * *`)
+/// - Each scheduled run checks for new jackets and sends notifications
+/// - Uses async job execution to prevent blocking
+///
+/// ## Keep-Alive Loop
+/// Maintains the program in a running state with 30-second sleep intervals,
+/// allowing the background scheduler to continue operation.
+///
+/// # Returns
+///
+/// - `Ok(())`: Never returned in practice as the loop runs indefinitely
+/// - `Err`: If critical initialization fails (database, scheduler setup)
+///
+/// # Environment Variables
+///
+/// - `DISCORD_WEBHOOK_URL`: Optional Discord webhook for notifications
+///
+/// # Examples
+///
+/// ```bash
+/// # Run with Discord notifications
+/// DISCORD_WEBHOOK_URL="https://discord.com/api/webhooks/..." cargo run
+///
+/// # Run without notifications (logging only)
+/// cargo run
+/// ```
 #[tokio::main]
 async fn main() -> Result<()> {
     dotenvy::dotenv().ok();
