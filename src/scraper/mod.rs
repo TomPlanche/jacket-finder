@@ -212,11 +212,13 @@ impl Scraper {
     /// - **Prices**: `.product-price-exc-vat` (price excluding VAT)
     /// - **Links**: `.product-card a, .card-image a` (product page URLs)
     /// - **Images**: `.responsive-image__image` (product images with lazy loading support)
+    /// - **Sold Out**: `.card-body p` (availability status detection)
     ///
     /// # Filtering Logic
     ///
-    /// Products are only included if their combined brand and title contains
-    /// any of the configured search terms (case insensitive matching).
+    /// Products are only included if they meet all criteria:
+    /// - Combined brand and title contains any of the configured search terms (case insensitive)
+    /// - Product is not marked as "Sold Out" in the availability status
     ///
     /// # Deduplication Strategy
     ///
@@ -357,6 +359,16 @@ impl Scraper {
                         .any(|term| title_lower.contains(&term.to_lowercase()));
 
                     if !matches_search_term {
+                        continue;
+                    }
+
+                    // Skip sold out items
+                    let sold_out_selector = Selector::parse(".card-body p").unwrap();
+                    let is_sold_out = product
+                        .select(&sold_out_selector)
+                        .any(|el| el.text().collect::<String>().trim() == "Sold Out");
+
+                    if is_sold_out {
                         continue;
                     }
 
